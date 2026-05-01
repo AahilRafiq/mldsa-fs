@@ -42,7 +42,7 @@ def main():
     # Sign at each time period
     for t in range(total):
         if t > 0:
-            mmm.update(t)
+            sk = mmm.update(sk, t)
         sig = mmm.sign(sk, messages[t], t)
         signatures.append(sig)
         e = _epoch(t)
@@ -93,7 +93,7 @@ def main():
         sigs = []
         for t in range(n):
             if t > 0:
-                m.update(t)
+                sk2 = m.update(sk2, t)
             sigs.append(m.sign(sk2, f"m{t}".encode(), t))
         ok = all(m.verify(pk2, f"m{t}".encode(), sigs[t], t) for t in range(n))
         print(f"  l={test_l}, epochs={test_l}, periods={n}: all valid = {ok}")

@@ -35,8 +35,8 @@ class MLDSA(AbstractSignature):
     def get_total_time_periods(self) -> int:
         return 1
 
-    def update(self, t: int) -> None:
-        pass
+    def update(self, sk, t: int):
+        return sk
 
     def cleanup(self) -> None:
         pass

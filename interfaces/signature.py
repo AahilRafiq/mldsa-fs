@@ -15,7 +15,7 @@ class AbstractSignature(ABC):
     def get_total_time_periods(self) -> int: pass
 
     @abstractmethod
-    def update(self, t: int): pass
+    def update(self, sk, t: int): pass
 
     @abstractmethod
     def p_keygen(self, seed: bytes = None): pass

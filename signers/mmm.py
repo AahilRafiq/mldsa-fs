@@ -110,7 +110,7 @@ class MMM(AbstractSignature):
 
         # Advance L to be ready for epoch 1
         if self.l > 1:
-            self.L.update(1)
+            sk_L = self.L.update(sk_L, 1)
 
         self.secret_state['sk_L'] = sk_L
         self.secret_state['cert'] = cert_0
@@ -169,7 +169,7 @@ class MMM(AbstractSignature):
 
         return True
 
-    def update(self, t: int):
+    def update(self, sk, t: int):
         """
         Prepare for signing at global time t.
 
@@ -182,7 +182,7 @@ class MMM(AbstractSignature):
 
         if new_epoch == cur_epoch:
             # Same epoch — advance B within the epoch
-            self.B.update(new_sub)
+            self.secret_state['sk_B'] = self.B.update(self.secret_state['sk_B'], new_sub)
         else:
             # Epoch transition — build new bottom tree
             seed_B_new, seed_chain_next = prg(self.secret_state['seed_chain'])
@@ -201,7 +201,7 @@ class MMM(AbstractSignature):
             # Advance L past new_epoch
             next_L_epoch = new_epoch + 1
             if next_L_epoch < self.l:
-                self.L.update(next_L_epoch)
+                self.secret_state['sk_L'] = self.L.update(self.secret_state['sk_L'], next_L_epoch)
 
             # Replace state
             self.secret_state['sk_B'] = sk_B_new

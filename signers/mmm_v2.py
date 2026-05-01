@@ -59,19 +59,23 @@ class MMM_V2(AbstractSignature):
 
         return self.secret_state['pk_B'], self.secret_state['cert'], sign, t
 
-    def update(self, t: int):
+    def update(self, sk, t: int):
         epoch = _epoch(t)
         sub_period = _sub_period(t)
 
         if self.secret_state['curr_epoch'] == epoch:
-            self.epoch_tree.update(sub_period)
+            self.secret_state['sk_main'] = self.epoch_tree.update(self.secret_state['sk_main'], sub_period)
         else:
-            self.main_tree.update(epoch)
+            self.secret_state['sk_main'] = self.main_tree.update(self.secret_state['sk_main'], epoch)
             self.secret_state['curr_epoch'] = epoch
 
             seed_B_new, seed_chain_new = prg(self.secret_state['seed_chain'])
             self.epoch_tree = build_sum_tree(lambda: MLDSA(), epoch)
             sk_B_new, pk_B_new = self.epoch_tree.keygen(seed_B_new)
             cert_new = self.main_tree.sign(self.secret_state['sk_main'], pk_B_new, epoch)
+
+            self.secret_state['cert'] = cert_new
+            self.secret_state['pk_B'] = pk_B_new
+            self.secret_state['seed_chain'] = seed_chain_new
 
         return self.secret_state

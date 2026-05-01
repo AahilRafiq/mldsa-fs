@@ -29,7 +29,7 @@ def main():
 
     for t in range(total):
         if t > 0:
-            tree.update(t)
+            sk = tree.update(sk, t)
         sig = tree.sign(sk, messages[t], t)
         signatures.append(sig)
 
@@ -70,7 +70,7 @@ def main():
         sigs = []
         for t in range(n):
             if t > 0:
-                t2.update(t)
+                sk2 = t2.update(sk2, t)
             sigs.append(t2.sign(sk2, f"m{t}".encode(), t))
         ok = all(t2.verify(pk2, f"m{t}".encode(), sigs[t], t) for t in range(n))
         print(f"  depth={depth}, periods={n}: all valid = {ok}")

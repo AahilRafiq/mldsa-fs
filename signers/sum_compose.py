@@ -11,12 +11,6 @@ class SumCompose(AbstractSignature):
         self.scheme_B: AbstractSignature | None = scheme_B
         self.T_A: int = scheme_A.get_total_time_periods()
         self.T_B: int = scheme_B.get_total_time_periods()
-        self.secret_state: dict[str, Any] | None = {
-            'active_sk': None,
-            'deferred_seed': None,
-            'pk_a': None,
-            'pk_b': None
-        }
         self.BASE_ALGO: BaseAlgo = BASE_ALGO
 
     def keygen(self, seed: bytes = None) -> tuple[Any, Any]:
@@ -26,24 +20,42 @@ class SumCompose(AbstractSignature):
         pk_b = self.scheme_B.p_keygen(seed_b)
         combined_pk = hashlib.sha256(pk_a + pk_b).digest()
 
-        self.secret_state['pk_a'] = pk_a
-        self.secret_state['pk_b'] = pk_b
-        self.secret_state['active_sk'] = sk_a
-        self.secret_state['deferred_seed'] = seed_b
+        sk = {
+            'active_sk': sk_a,
+            'deferred_seed': seed_b,
+            'pk_a': pk_a,
+            'pk_b': pk_b,
+        }
 
-        return combined_pk, self.secret_state
+        return combined_pk, sk
 
-    def update(self, t: int):
+    def update(self, sk: dict, t: int) -> dict:
         if t < self.T_A:
-            self.scheme_A.update(t)
+            new_active_sk = self.scheme_A.update(sk['active_sk'], t)
+            return {
+                'active_sk': new_active_sk,
+                'deferred_seed': sk['deferred_seed'],
+                'pk_a': sk['pk_a'],
+                'pk_b': sk['pk_b'],
+            }
         elif t == self.T_A:
-            self.secret_state['active_sk'] = self.scheme_B.s_keygen(self.secret_state['deferred_seed'])
-            self.secret_state['deferred_seed'] = None
             self.scheme_A.cleanup()
+            new_active_sk = self.scheme_B.s_keygen(sk['deferred_seed'])
+            return {
+                'active_sk': new_active_sk,
+                'deferred_seed': None,
+                'pk_a': sk['pk_a'],
+                'pk_b': sk['pk_b'],
+            }
         else:
-            self.scheme_B.update(t - self.T_A)
+            new_active_sk = self.scheme_B.update(sk['active_sk'], t - self.T_A)
+            return {
+                'active_sk': new_active_sk,
+                'deferred_seed': None,
+                'pk_a': sk['pk_a'],
+                'pk_b': sk['pk_b'],
+            }
 
-        return self.secret_state
 
     def sign(self, sk, message: bytes, t: int) -> tuple:
         if t < self.T_A:
@@ -51,7 +63,7 @@ class SumCompose(AbstractSignature):
         else:
             sig_payload = self.scheme_B.sign(sk['active_sk'], message, t - self.T_A)
 
-        return sig_payload, self.secret_state['pk_a'], self.secret_state['pk_b'], t
+        return sig_payload, sk['pk_a'], sk['pk_b'], t
 
     def _verify(self, pk: bytes, message: bytes, signature, t: int) -> bool:
         sig_payload, pk_a, pk_b, sig_t = signature
@@ -81,12 +93,11 @@ class SumCompose(AbstractSignature):
         pk_b = self.scheme_B.p_keygen(seed_b)
         return hashlib.sha256(pk_a + pk_b).digest()
 
-    def s_keygen(self, seed: bytes = None) -> bytes:
+    def s_keygen(self, seed: bytes = None) -> dict:
         _, sk = self.keygen(seed)
         return sk
 
     def cleanup(self):
-        self.secret_state = None
         self.scheme_A = None
         self.scheme_B = None
 

@@ -37,10 +37,10 @@ def main():
     messages = [f"message at {t}".encode() for t in range(total)]
     signatures = []
 
-    # Sign at each time period, calling update(t) BEFORE sign(t)
+    # Sign at each time period, calling update(sk, t) BEFORE sign(t)
     for t in range(total):
         if t > 0:
-            product.update(t)
+            product.update(sk, t)
         sig = product.sign(sk, messages[t], t)
         signatures.append(sig)
 

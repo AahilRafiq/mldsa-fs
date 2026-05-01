@@ -52,8 +52,7 @@ class ProductCompose(AbstractSignature):
         cert_0 = self.scheme_A.sign(sk_A, _pk_to_bytes(pk_B_0), 0)
 
         # Advance A to be ready for epoch 1
-        # (update(1) means "prepare for time period 1")
-        self.scheme_A.update(1)
+        sk_A = self.scheme_A.update(sk_A, 1)
 
         self.secret_state['sk_A'] = sk_A
         self.secret_state['cert'] = cert_0
@@ -116,9 +115,9 @@ class ProductCompose(AbstractSignature):
     #  Key update / evolution
     # ------------------------------------------------------------------ #
 
-    def update(self, t: int):
+    def update(self, sk, t: int):
         """
-        update(t) — prepare the scheme for signing at global time t.
+        update(sk, t) — prepare the scheme for signing at global time t.
         Called BEFORE sign(t).
 
         If t is in the same epoch as current: update B for the new sub-period.
@@ -130,7 +129,7 @@ class ProductCompose(AbstractSignature):
 
         if new_epoch == cur_epoch:
             # Same epoch — just advance B to the new sub-period
-            self.scheme_B.update(new_sub)
+            self.secret_state['sk_B'] = self.scheme_B.update(self.secret_state['sk_B'], new_sub)
         else:
             # New epoch — generate fresh B, certify with A
             seed_B_new, seed_chain_next = prg(self.secret_state['seed_chain'])
@@ -144,7 +143,7 @@ class ProductCompose(AbstractSignature):
             # Advance A past new_epoch (prepare for new_epoch + 1)
             next_a_epoch = new_epoch + 1
             if next_a_epoch < self.T_A:
-                self.scheme_A.update(next_a_epoch)
+                self.secret_state['sk_A'] = self.scheme_A.update(self.secret_state['sk_A'], next_a_epoch)
 
             # Replace B state
             self.secret_state['sk_B'] = sk_B_new
