@@ -1,27 +1,29 @@
 from typing import Any
 from interfaces.signature import AbstractSignature
 from helpers.prg import prg
-from dilithium_py.ml_dsa import ML_DSA_65
+from verifiers.sum_compose import mldsa_sum_tree_verify
+from enums.BaseAlgo import BaseAlgo
 import hashlib
 
 class SumCompose(AbstractSignature):
-    def __init__(self, mldsa_A, mldsa_B):
-        self.mldsa_A: AbstractSignature | None = mldsa_A
-        self.mldsa_B: AbstractSignature | None = mldsa_B
-        self.T_A: int = mldsa_A.get_total_time_periods()
-        self.T_B: int = mldsa_B.get_total_time_periods()
+    def __init__(self, scheme_A, scheme_B, BASE_ALGO = BaseAlgo.ML_DSA):
+        self.scheme_A: AbstractSignature | None = scheme_A
+        self.scheme_B: AbstractSignature | None = scheme_B
+        self.T_A: int = scheme_A.get_total_time_periods()
+        self.T_B: int = scheme_B.get_total_time_periods()
         self.secret_state: dict[str, Any] | None = {
             'active_sk': None,
             'deferred_seed': None,
             'pk_a': None,
             'pk_b': None
         }
+        self.BASE_ALGO: BaseAlgo = BASE_ALGO
 
     def keygen(self, seed: bytes = None) -> tuple[Any, Any]:
         seed_a, seed_b = prg(seed)
 
-        pk_a, sk_a = self.mldsa_A.keygen(seed_a)
-        pk_b = self.mldsa_B.p_keygen(seed_b)
+        pk_a, sk_a = self.scheme_A.keygen(seed_a)
+        pk_b = self.scheme_B.p_keygen(seed_b)
         combined_pk = hashlib.sha256(pk_a + pk_b).digest()
 
         self.secret_state['pk_a'] = pk_a
@@ -29,23 +31,25 @@ class SumCompose(AbstractSignature):
         self.secret_state['active_sk'] = sk_a
         self.secret_state['deferred_seed'] = seed_b
 
-        return combined_pk, sk_a
+        return combined_pk, self.secret_state
 
     def update(self, t: int):
         if t < self.T_A:
-            self.mldsa_A.update(t)
+            self.scheme_A.update(t)
         elif t == self.T_A:
-            self.secret_state['active_sk'] = self.mldsa_B.s_keygen(self.secret_state['deferred_seed'])
+            self.secret_state['active_sk'] = self.scheme_B.s_keygen(self.secret_state['deferred_seed'])
             self.secret_state['deferred_seed'] = None
-            self.mldsa_A.cleanup()
+            self.scheme_A.cleanup()
         else:
-            self.mldsa_B.update(t - self.T_A)
+            self.scheme_B.update(t - self.T_A)
+
+        return self.secret_state
 
     def sign(self, sk, message: bytes, t: int) -> tuple:
         if t < self.T_A:
-            sig_payload = self.mldsa_A.sign(self.secret_state['active_sk'], message, t)
+            sig_payload = self.scheme_A.sign(sk['active_sk'], message, t)
         else:
-            sig_payload = self.mldsa_B.sign(self.secret_state['active_sk'], message, t - self.T_A)
+            sig_payload = self.scheme_B.sign(sk['active_sk'], message, t - self.T_A)
 
         return sig_payload, self.secret_state['pk_a'], self.secret_state['pk_b'], t
 
@@ -59,39 +63,22 @@ class SumCompose(AbstractSignature):
             return False
 
         if sig_t < self.T_A:
-            return self.mldsa_A.verify(pk_a, message, sig_payload, sig_t)
+            return self.scheme_A.verify(pk_a, message, sig_payload, sig_t)
         else:
-            return self.mldsa_B.verify(pk_b, message, sig_payload, sig_t - self.T_A)
+            return self.scheme_B.verify(pk_b, message, sig_payload, sig_t - self.T_A)
 
     def verify(self, pk: bytes, message: bytes, signature, t: int) -> bool:
-        merkle_path = self._get_merkle_path(t)
-        sig_payload, pk_a, pk_b, sig_t = signature
-
-        if sig_t != t:
-            return False
-
-        for direction in merkle_path[:len(merkle_path) - 1]:
-            if hashlib.sha256(pk_a + pk_b).digest() != pk:
-                return False
-
-            pk = pk_b if direction == 'R' else pk_a
-
-            signature = sig_payload
-            sig_payload, pk_a, pk_b, sig_t = signature
-
-        # Base verification
-        direction = merkle_path[-1]
-        if hashlib.sha256(pk_a + pk_b).digest() != pk:
-            return False
-        return ML_DSA_65.verify(pk_b if direction == 'R' else pk_a, message, sig_payload)
+        if self.BASE_ALGO == BaseAlgo.ML_DSA:
+            return mldsa_sum_tree_verify(pk, message, signature, t, self.T_A, self.T_B)
+        return self._verify(pk, message, signature, t)
 
     def get_total_time_periods(self) -> int:
-        return self.T_A + self.mldsa_B.get_total_time_periods()
+        return self.T_A + self.scheme_B.get_total_time_periods()
 
     def p_keygen(self, seed: bytes = None) -> bytes:
         seed_a, seed_b = prg(seed)
-        pk_a = self.mldsa_A.p_keygen(seed_a)
-        pk_b = self.mldsa_B.p_keygen(seed_b)
+        pk_a = self.scheme_A.p_keygen(seed_a)
+        pk_b = self.scheme_B.p_keygen(seed_b)
         return hashlib.sha256(pk_a + pk_b).digest()
 
     def s_keygen(self, seed: bytes = None) -> bytes:
@@ -99,12 +86,9 @@ class SumCompose(AbstractSignature):
         return sk
 
     def cleanup(self):
-        """
-        Probably good enough, cleans up the state but not the object itself as the methods might always be in use
-        """
         self.secret_state = None
-        self.mldsa_A = None
-        self.mldsa_B = None
+        self.scheme_A = None
+        self.scheme_B = None
 
     def _get_merkle_path(self, t) -> list[str]:
         num_bits: int = (self.T_A + self.T_B // 2).bit_length()

@@ -23,7 +23,6 @@ from typing import Callable
 from interfaces.signature import AbstractSignature
 from signers.sum_compose import SumCompose
 
-
 def build_sum_tree(
     scheme_factory: Callable[[], AbstractSignature],
     depth: int,
@@ -35,8 +34,8 @@ def build_sum_tree(
     - depth=d: returns Sum(SumTree(d-1), SumTree(d-1)) with 2^d time periods
 
     Args:
-        scheme_factory: callable returning a fresh AbstractSignature instance
-        depth: tree depth (total periods = 2^depth)
+        :param scheme_factory: callable returning a fresh AbstractSignature instance
+        :param depth: tree depth (total periods = 2^depth)
 
     Returns:
         An AbstractSignature with 2^depth time periods

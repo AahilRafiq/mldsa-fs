@@ -12,13 +12,13 @@ Verifies:
 import secrets
 from signers.mldsa import MLDSA
 from signers.sum_tree import build_sum_tree
-
+from enums.BaseAlgo import BaseAlgo
 
 def main():
     seed = secrets.token_bytes(32)
 
     # Build a depth-3 sum tree: 8 time periods
-    tree = build_sum_tree(lambda: MLDSA(), depth=3)
+    tree = build_sum_tree(lambda: MLDSA(), depth=3, BASE_ALGO=BaseAlgo.ML_DSA)
     total = tree.get_total_time_periods()
     print(f"SumTree(MLDSA, depth=3): {total} time periods")
     assert total == 8, f"Expected 8, got {total}"
@@ -63,7 +63,7 @@ def main():
     # Also test smaller trees
     print(f"\n--- Quick tests for other depths ---")
     for depth in range(4):
-        t2 = build_sum_tree(lambda: MLDSA(), depth=depth)
+        t2 = build_sum_tree(lambda: MLDSA(), depth=depth, BASE_ALGO=BaseAlgo.ML_DSA)
         n = t2.get_total_time_periods()
         s = secrets.token_bytes(32)
         pk2, sk2 = t2.keygen(s)
