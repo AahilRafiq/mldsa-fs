@@ -7,3 +7,12 @@ requires-python = ">=3.14"
 dependencies = [
     "dilithium-py>=1.4.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

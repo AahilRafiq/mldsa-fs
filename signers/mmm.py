@@ -1,5 +1,6 @@
 from typing import Any
 
+from dilithium_py.ml_dsa import ML_DSA_65
 from helpers.prg import prg
 from interfaces.signature import AbstractSignature
 from signers.sum_tree import build_sum_tree
@@ -41,6 +42,7 @@ class MMM(AbstractSignature):
 
         secret_state['cert'] = cert
         secret_state['pk_B'] = pk_B0
+        secret_state['sk_B'] = sk_B0
         secret_state['seed_chain'] = seed_chain_new
         secret_state['curr_epoch'] = 0
 
@@ -49,7 +51,7 @@ class MMM(AbstractSignature):
     def sign(self, sk, message: bytes, t: int):
         sub_period = _sub_period(t)
 
-        sign = self.epoch_tree.sign(sk['pk_B'], message, sub_period)
+        sign = self.epoch_tree.sign(sk['sk_B'], message, sub_period)
 
         return sk['pk_B'], sk['cert'], sign, t
 
@@ -58,18 +60,19 @@ class MMM(AbstractSignature):
         sub_period = _sub_period(t)
 
         if sk['curr_epoch'] == epoch:
-            sk['sk_main'] = self.epoch_tree.update(sk['sk_main'], sub_period)
+            sk['sk_B'] = self.epoch_tree.update(sk['sk_B'], sub_period)
         else:
             sk['sk_main'] = self.main_tree.update(sk['sk_main'], epoch)
             sk['curr_epoch'] = epoch
 
             seed_B_new, seed_chain_new = prg(sk['seed_chain'])
             self.epoch_tree = build_sum_tree(lambda: MLDSA(), epoch)
-            sk_B_new, pk_B_new = self.epoch_tree.keygen(seed_B_new)
+            pk_B_new, sk_B_new = self.epoch_tree.keygen(seed_B_new)
             cert_new = self.main_tree.sign(sk['sk_main'], pk_B_new, epoch)
 
             sk['cert'] = cert_new
             sk['pk_B'] = pk_B_new
+            sk['sk_B'] = sk_B_new
             sk['seed_chain'] = seed_chain_new
 
         return sk
@@ -83,7 +86,10 @@ class MMM(AbstractSignature):
         if not self.main_tree.verify(pk, pk_B, cert, epoch):
             return False
 
-        if not mldsa_sum_tree_verify(pk_B, message, signature, sub_period, (1 << epoch)):
+        if epoch == 0:
+            return ML_DSA_65.verify(pk_B, message, sign)
+
+        if not mldsa_sum_tree_verify(pk_B, message, sign, sub_period, (1 << epoch)):
             return False
 
         return True
