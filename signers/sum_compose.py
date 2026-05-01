@@ -1,13 +1,15 @@
 from typing import Any
 from interfaces.signature import AbstractSignature
 from helpers.prg import prg
+from dilithium_py.ml_dsa import ML_DSA_65
 import hashlib
 
 class SumCompose(AbstractSignature):
     def __init__(self, mldsa_A, mldsa_B):
         self.mldsa_A: AbstractSignature | None = mldsa_A
         self.mldsa_B: AbstractSignature | None = mldsa_B
-        self.T_A: int | None = mldsa_A.get_total_time_periods()
+        self.T_A: int = mldsa_A.get_total_time_periods()
+        self.T_B: int = mldsa_B.get_total_time_periods()
         self.secret_state: dict[str, Any] | None = {
             'active_sk': None,
             'deferred_seed': None,
@@ -47,7 +49,7 @@ class SumCompose(AbstractSignature):
 
         return sig_payload, self.secret_state['pk_a'], self.secret_state['pk_b'], t
 
-    def verify(self, pk: bytes, message: bytes, signature, t: int) -> bool:
+    def _verify(self, pk: bytes, message: bytes, signature, t: int) -> bool:
         sig_payload, pk_a, pk_b, sig_t = signature
 
         if sig_t != t:
@@ -60,6 +62,28 @@ class SumCompose(AbstractSignature):
             return self.mldsa_A.verify(pk_a, message, sig_payload, sig_t)
         else:
             return self.mldsa_B.verify(pk_b, message, sig_payload, sig_t - self.T_A)
+
+    def verify(self, pk: bytes, message: bytes, signature, t: int) -> bool:
+        merkle_path = self._get_merkle_path(t)
+        sig_payload, pk_a, pk_b, sig_t = signature
+
+        if sig_t != t:
+            return False
+
+        for direction in merkle_path[:len(merkle_path) - 1]:
+            if hashlib.sha256(pk_a + pk_b).digest() != pk:
+                return False
+
+            pk = pk_b if direction == 'R' else pk_a
+
+            signature = sig_payload
+            sig_payload, pk_a, pk_b, sig_t = signature
+
+        # Base verification
+        direction = merkle_path[-1]
+        if hashlib.sha256(pk_a + pk_b).digest() != pk:
+            return False
+        return ML_DSA_65.verify(pk_b if direction == 'R' else pk_a, message, sig_payload)
 
     def get_total_time_periods(self) -> int:
         return self.T_A + self.mldsa_B.get_total_time_periods()
@@ -79,3 +103,11 @@ class SumCompose(AbstractSignature):
         Probably good enough, cleans up the state but not the object itself as the methods might always be in use
         """
         self.secret_state = None
+        self.mldsa_A = None
+        self.mldsa_B = None
+
+    def _get_merkle_path(self, t) -> list[str]:
+        num_bits: int = (self.T_A + self.T_B // 2).bit_length()
+        bit_str = f"{t:0{num_bits}b}"
+
+        return ['L' if bit == '0' else 'R' for bit in bit_str]
