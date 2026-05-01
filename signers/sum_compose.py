@@ -81,7 +81,7 @@ class SumCompose(AbstractSignature):
 
     def verify(self, pk: bytes, message: bytes, signature, t: int) -> bool:
         if self.BASE_ALGO == BaseAlgo.ML_DSA:
-            return mldsa_sum_tree_verify(pk, message, signature, t, self.T_A, self.T_B)
+            return mldsa_sum_tree_verify(pk, message, signature, t, self.T_A + self.T_B)
         return self._verify(pk, message, signature, t)
 
     def get_total_time_periods(self) -> int:
