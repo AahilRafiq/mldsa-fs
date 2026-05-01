@@ -1,56 +1,58 @@
-from signers.mmm import MMM, _epoch, _sub_period
 import secrets
+from signers.mmm import MMM, _epoch, _sub_period
 
 
 def main():
     print("=== MMM Forward-Secure Signature Scheme Demo ===\n")
 
-    l = 2  # 2^2 = 4 epochs
+    # Instantiate MMM with depth l=2 (supports 4 main epochs)
+    l = 2
     mmm = MMM(l)
     seed = secrets.token_bytes(32)
+
+    # Key generation
     pk, sk = mmm.keygen(seed)
-    print(f"Key generated. pk = {pk.hex()[:24]}...\n")
+    print(f"Key generation complete. Public key: {pk.hex()[:32]}...")
+    print(f"Initial epoch: {sk['curr_epoch']}\n")
 
-    messages = {
-        0: b"message at t=0 (epoch 0)",
-        1: b"message at t=1 (epoch 1, sub 0)",
-        2: b"message at t=2 (epoch 1, sub 1)",
-        3: b"message at t=3 (epoch 2, sub 0)",
-        4: b"message at t=4 (epoch 2, sub 1)",
-    }
-
+    # Sign and verify across several time periods
+    time_periods = [0, 1, 2, 3, 4, 5, 6]
     signatures = {}
-    sk_snapshots = {}
 
-    for t, msg in messages.items():
+    print("--- Signing ---")
+    for t in time_periods:
+        msg = f"message at t={t}".encode()
+        if t > 0:
+            sk = mmm.update(sk, t)
         sig = mmm.sign(sk, msg, t)
-        signatures[t] = sig
-        sk_snapshots[t] = sk
-        print(f"  Signed at t={t}  [epoch={_epoch(t)}, sub={_sub_period(t)}]  msg={msg.decode()!r}")
-        next_t = t + 1
-        if next_t <= max(messages):
-            sk = mmm.update(sk, next_t)
+        signatures[t] = (msg, sig)
+        print(f"  t={t}  epoch={_epoch(t)}  sub={_sub_period(t)}  msg={msg.decode()!r}")
 
-    print("\n=== Valid signatures (expect all True) ===")
-    for t, msg in messages.items():
-        result = mmm.verify(pk, msg, signatures[t], t)
-        print(f"  verify(msg[{t}], sig[{t}], t={t}): {result}")
+    print("\n--- Verification (valid signatures, expect True) ---")
+    for t in time_periods:
+        msg, sig = signatures[t]
+        result = mmm.verify(pk, msg, sig, t)
+        print(f"  verify(t={t}): {result}")
 
-    print("\n=== Cross-time forgery attempts (expect all False) ===")
-    for t_sign, msg in messages.items():
-        for t_verify in messages:
+    print("\n--- Cross-time replay attacks (expect False) ---")
+    for t_sign in [0, 1, 3]:
+        for t_verify in [1, 3, 6]:
             if t_sign == t_verify:
                 continue
-            result = mmm.verify(pk, msg, signatures[t_sign], t_verify)
-            print(f"  verify(sig_from_t={t_sign}, claimed_t={t_verify}): {result}")
+            msg, sig = signatures[t_sign]
+            result = mmm.verify(pk, msg, sig, t_verify)
+            print(f"  sig from t={t_sign} replayed at t={t_verify}: {result}")
 
-    print("\n=== Forward security: compromised old sk cannot forge future signatures ===")
-    # Attacker gets sk at t=1, tries to sign at t=2
-    sk_leaked = sk_snapshots[1]
-    forged_msg = b"forged message using old key"
-    forged_sig = mmm.sign(sk_leaked, forged_msg, 2)
-    result = mmm.verify(pk, forged_msg, forged_sig, 2)
-    print(f"  Leaked sk at t=1, attempted forge at t=2: {result}")
+    print("\n--- Tampered message (expect False) ---")
+    msg, sig = signatures[0]
+    result = mmm.verify(pk, b"tampered message", sig, 0)
+    print(f"  verify(tampered_msg, sig_t0, t=0): {result}")
+
+    print("\n--- Wrong public key (expect False) ---")
+    wrong_pk, _ = MMM(l).keygen(secrets.token_bytes(32))
+    msg, sig = signatures[0]
+    result = mmm.verify(wrong_pk, msg, sig, 0)
+    print(f"  verify(wrong_pk, msg, sig_t0, t=0): {result}")
 
 
 if __name__ == "__main__":
