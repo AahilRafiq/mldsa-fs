@@ -5,8 +5,10 @@ A Python implementation of the **MMM forward-secure signature scheme**, built on
 Forward security means that if a signer's secret key is compromised at time `t`, an attacker cannot forge valid signatures for any past time period `t' < t`.
 
 ---
+
 ## Module Structure
 
+```
 mldsa-fs/
 ├── interfaces/
 │   └── signature.py          # Abstract signature interface
@@ -20,10 +22,12 @@ mldsa-fs/
 │   ├── sum_tree.py           # Tree builder (recursive)
 │   └── mmm.py                # Main MMM scheme
 └── verifiers/
-└── sum_compose.py        # Optimized verification
+    └── sum_compose.py        # Optimized verification
+```
 
 ## Class Hierarchy
 
+```
 AbstractSignature (Interface)
 │
 ├── MLDSA                 # Leaf-level base signature
@@ -31,6 +35,8 @@ AbstractSignature (Interface)
 ├── SumCompose            # Binary tree composition
 │
 └── MMM                   # Top-level forward-secure scheme
+```
+
 ## How the MMM scheme works
 
 MMM organises time into a two-level hierarchy:
